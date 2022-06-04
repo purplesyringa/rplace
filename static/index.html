@@ -35,6 +35,8 @@
             Токен: <input type="password" placeholder="abcdefg" id="token" required />
             |
             Цвет: <input type="color" id="color" />
+            |
+            <span class="status">Connecting...</span>
         </div>
 
         <div class="grid">
@@ -56,44 +58,57 @@
             let fieldHeight = null;
 
             const url = location.protocol.replace("http", "ws") + "//" + location.hostname + ":9000/ws";
-            const ws = new WebSocket(url);
-            ws.addEventListener("message", async e => {
-                console.log(e.data);
-                if(e.data instanceof Blob) {
-                    // Whole field data
-                    ctx.fillStyle = `#000000`;
-                    ctx.fillRect(0, 0, fieldWidth * PIXEL_SIZE, fieldHeight * PIXEL_SIZE);
-                    const data = new Uint8Array(await e.data.arrayBuffer());
-                    for(let y = 0; y < fieldHeight; y++) {
-                        for(let x = 0; x < fieldWidth; x++) {
-                            const offset = (y * fieldWidth + x) * 4;
-                            const r = data[offset];
-                            const g = data[offset + 1];
-                            const b = data[offset + 2];
-                            const a = data[offset + 3];
+
+            let ws;
+
+            function connect() {
+                ws = new WebSocket(url);
+                ws.addEventListener("message", async e => {
+                    console.log(e.data);
+                    if(e.data instanceof Blob) {
+                        // Whole field data
+                        ctx.fillStyle = `#000000`;
+                        ctx.fillRect(0, 0, fieldWidth * PIXEL_SIZE, fieldHeight * PIXEL_SIZE);
+                        const data = new Uint8Array(await e.data.arrayBuffer());
+                        for(let y = 0; y < fieldHeight; y++) {
+                            for(let x = 0; x < fieldWidth; x++) {
+                                const offset = (y * fieldWidth + x) * 4;
+                                const r = data[offset];
+                                const g = data[offset + 1];
+                                const b = data[offset + 2];
+                                const a = data[offset + 3];
+                                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+                                ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+                            }
+                        }
+                        document.querySelector(".status").textContent = "Connected";
+                    } else if(typeof e.data === "string") {
+                        if(e.data.startsWith("error ")) {
+                            console.error(e.data.substr(6));
+                            alert(e.data.substr(6));
+                        } else if(e.data.startsWith("grid ")) {
+                            const [_, width, height] = e.data.split(" ");
+                            fieldWidth = width;
+                            fieldHeight = height;
+                            canvas.width = width * PIXEL_SIZE;
+                            canvas.height = height * PIXEL_SIZE;
+                        } else if(e.data.startsWith("set ")) {
+                            const [_, x, y, r, g, b, a] = e.data.split(" ");
+                            ctx.fillStyle = `#000000`;
+                            ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
                             ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
                             ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
                         }
                     }
-                } else if(typeof e.data === "string") {
-                    if(e.data.startsWith("error ")) {
-                        console.error(e.data.substr(6));
-                        alert(e.data.substr(6));
-                    } else if(e.data.startsWith("grid ")) {
-                        const [_, width, height] = e.data.split(" ");
-                        fieldWidth = width;
-                        fieldHeight = height;
-                        canvas.width = width * PIXEL_SIZE;
-                        canvas.height = height * PIXEL_SIZE;
-                    } else if(e.data.startsWith("set ")) {
-                        const [_, x, y, r, g, b, a] = e.data.split(" ");
-                        ctx.fillStyle = `#000000`;
-                        ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
-                        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
-                        ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
-                    }
-                }
-            });
+                });
+                ws.addEventListener("close", e => {
+                    document.querySelector(".status").textContent = "Disconnected";
+                    console.error(e);
+                    setTimeout(connect, 1000);
+                });
+            }
+
+            connect();
 
             canvas.addEventListener("mousemove", e => {
                 const x = Math.floor(e.offsetX / PIXEL_SIZE);
