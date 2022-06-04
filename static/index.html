@@ -46,7 +46,8 @@
         </div>
 
         <script type="text/javascript">
-            const PIXEL_SIZE = 16;
+            const PIXEL_SIZE = 8;
+            const BACKGROUND_COLOR = "#ffffff";
 
             document.querySelector(".highlighted-row").style.height = `${PIXEL_SIZE}px`;
             document.querySelector(".highlighted-column").style.width = `${PIXEL_SIZE}px`;
@@ -67,7 +68,7 @@
                     console.log(e.data);
                     if(e.data instanceof Blob) {
                         // Whole field data
-                        ctx.fillStyle = `#000000`;
+                        ctx.fillStyle = BACKGROUND_COLOR;
                         ctx.fillRect(0, 0, fieldWidth * PIXEL_SIZE, fieldHeight * PIXEL_SIZE);
                         const data = new Uint8Array(await e.data.arrayBuffer());
                         for(let y = 0; y < fieldHeight; y++) {
@@ -94,7 +95,7 @@
                             canvas.height = height * PIXEL_SIZE;
                         } else if(e.data.startsWith("set ")) {
                             const [_, x, y, r, g, b, a] = e.data.split(" ");
-                            ctx.fillStyle = `#000000`;
+                            ctx.fillStyle = BACKGROUND_COLOR;
                             ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
                             ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
                             ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
