@@ -168,7 +168,12 @@
                     return;
                 }
 
-                ws.send(`set ${token} ${x} ${y} ${r} ${g} ${b} ${a}`);
+                try {
+                    ws.send(`set ${token} ${x} ${y} ${r} ${g} ${b} ${a}`);
+                } catch(e) {
+                    alert(e);
+                    console.error(e);
+                }
             });
         </script>
     </body>
