@@ -33,11 +33,36 @@ struct GlobalState {
     >,
 }
 
+impl GlobalState {
+    async fn broadcast_grid_update(&self, x: usize, y: usize, cell: grid::CellData) {
+        for (_, ws) in self.ws_connections.read().await.iter() {
+            let ws = ws.clone();
+            tokio::spawn(async move {
+                ws.lock()
+                    .await
+                    .send(Message::Text(format!(
+                        "set {} {} {} {} {} {}",
+                        x, y, cell.r, cell.g, cell.b, cell.a
+                    )))
+                    .await
+            });
+        }
+    }
+}
+
 #[derive(FromForm)]
 struct GetTokenForm<'r> {
     login: &'r str,
     password: &'r str,
     group: usize,
+}
+
+#[derive(FromForm)]
+struct SetColorForm<'r> {
+    token: &'r str,
+    row: usize,
+    column: usize,
+    color: &'r str,
 }
 
 #[rocket::post("/get_token", data = "<info>")]
@@ -60,6 +85,50 @@ async fn get_token(state: &State<&'static GlobalState>, info: Form<GetTokenForm<
     }
 }
 
+fn parse_color(mut color: &str) -> Result<(u8, u8, u8)> {
+    if color.chars().next() == Some('#') {
+        color = &color[1..];
+    }
+    if color.len() != 6 {
+        bail!("Invalid color format: must be #rrggbb or rrggbb");
+    }
+    let r = u8::from_str_radix(&color[..2], 16)?;
+    let g = u8::from_str_radix(&color[2..4], 16)?;
+    let b = u8::from_str_radix(&color[4..], 16)?;
+    Ok((r, g, b))
+}
+
+#[rocket::post("/set_color", data = "<info>")]
+async fn set_color(state: &State<&'static GlobalState>, info: Form<SetColorForm<'_>>) -> String {
+    let token = match tokendb::Token::try_from_string(info.token) {
+        Ok(token) => token,
+        Err(e) => return e.to_string(),
+    };
+
+    let (r, g, b) = match parse_color(info.color) {
+        Ok(color) => color,
+        Err(e) => return e.to_string(),
+    };
+
+    if let Err(e) = state.tokendb.try_use_token(token, get_cooldown_period()) {
+        return e.to_string();
+    }
+
+    let x = info.column;
+    let y = info.row;
+    let a = 255;
+
+    let cell = grid::CellData { r, g, b, a };
+
+    if let Err(e) = state.grid.write().await.set_cell(x, y, cell) {
+        return e.to_string();
+    }
+
+    state.broadcast_grid_update(x, y, cell).await;
+
+    "OK".to_string()
+}
+
 async fn handle_ws_message(state: &'static GlobalState, msg: Message) -> Result<()> {
     match msg {
         Message::Text(ref s) => {
@@ -79,7 +148,7 @@ async fn handle_ws_message(state: &'static GlobalState, msg: Message) -> Result<
                     }
                 }
             }
-            if nums[2].max(nums[3]).max(nums[4]).max(nums[5]) > 255 {
+            if nums[2..6].iter().max().unwrap() > &255 {
                 bail!(
                     "Invalid command syntax: color components must be in range 0..255 (inclusive)"
                 );
@@ -94,24 +163,11 @@ async fn handle_ws_message(state: &'static GlobalState, msg: Message) -> Result<
             let b: u8 = nums[4] as u8;
             let a: u8 = nums[5] as u8;
 
-            state
-                .grid
-                .write()
-                .await
-                .set_cell(x, y, grid::CellData { r, g, b, a })?;
+            let cell = grid::CellData { r, g, b, a };
 
-            for (_, ws) in state.ws_connections.read().await.iter() {
-                let ws = ws.clone();
-                tokio::spawn(async move {
-                    ws.lock()
-                        .await
-                        .send(Message::Text(format!(
-                            "set {} {} {} {} {} {}",
-                            x, y, r, g, b, a
-                        )))
-                        .await
-                });
-            }
+            state.grid.write().await.set_cell(x, y, cell)?;
+
+            state.broadcast_grid_update(x, y, cell).await;
 
             Ok(())
         }
@@ -178,7 +234,7 @@ async fn handle_ws_connection(
 
 async fn start_http_server(state: &'static GlobalState) -> Result<()> {
     rocket::build()
-        .mount("/", routes![get_token])
+        .mount("/", routes![get_token, set_color])
         .mount("/", FileServer::from(relative!("static")))
         .manage(state)
         .launch()

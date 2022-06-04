@@ -11,6 +11,7 @@ pub struct Grid {
     mmapped_data: MmapMut,
 }
 
+#[derive(Copy, Clone)]
 pub struct CellData {
     pub r: u8,
     pub g: u8,
