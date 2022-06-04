@@ -100,10 +100,7 @@ fn parse_color(mut color: &str) -> Result<(u8, u8, u8)> {
 
 #[rocket::post("/set_color", data = "<info>")]
 async fn set_color(state: &State<&'static GlobalState>, info: Form<SetColorForm<'_>>) -> String {
-    let token = match tokendb::Token::try_from_string(info.token) {
-        Ok(token) => token,
-        Err(e) => return e.to_string(),
-    };
+    let token = tokendb::Token::from_string(info.token);
 
     let (r, g, b) = match parse_color(info.color) {
         Ok(color) => color,
@@ -137,7 +134,7 @@ async fn handle_ws_message(state: &'static GlobalState, msg: Message) -> Result<
                 bail!("Invalid command syntax: must be 'set <token> <x> <y> <r> <g> <b> <a>'");
             }
 
-            let token = tokendb::Token::try_from_string(&parts[1])?;
+            let token = tokendb::Token::from_string(&parts[1]);
 
             let mut nums = [0usize; 6];
             for i in 0..6 {
@@ -271,15 +268,16 @@ async fn start_ws_server(state: &'static GlobalState) {
 enum Command {
     Init(String, u32, u32),
     Serve(String),
+    AddToken(String, String, String),
 }
 
 fn get_command() -> Result<Command> {
     let mut args = std::env::args();
     args.next().unwrap();
 
-    let command = args
-        .next()
-        .context("The first CLI argument must be the command name: 'serve' or 'init'")?;
+    let command = args.next().context(
+        "The first CLI argument must be the command name: 'serve', 'init', or 'add-token'",
+    )?;
 
     match command.as_ref() {
         "init" => {
@@ -300,8 +298,18 @@ fn get_command() -> Result<Command> {
             let dir_path = args.next().context("'rplace serve' expects the path to the directory for permanent storage as an argument")?;
             Ok(Command::Serve(dir_path))
         }
+        "add-token" => {
+            let dir_path = args.next().context("'rplace add-token' expects the path to the directory for permanent storage as the first argument")?;
+            let token = args
+                .next()
+                .context("'rplace add-token' expects the token as the second argument")?;
+            let uid = args
+                .next()
+                .context("'rplace add-token' expects the UID as the third argument")?;
+            Ok(Command::AddToken(dir_path, token, uid))
+        }
         _ => bail!(
-            "Unknown CLI command: {}. 'serve' and 'init' are valid",
+            "Unknown CLI command: {}. Run rplace without arguments to see some help",
             command
         ),
     }
@@ -342,6 +350,13 @@ async fn main() -> Result<()> {
 
             tokio::spawn(start_ws_server(state));
             start_http_server(state).await?;
+            Ok(())
+        }
+        Command::AddToken(dir_path, token, uid) => {
+            let tokendb = tokendb::TokenDB::open(format!("{}/tokendb", dir_path).as_ref())
+                .context("Failed to load tokendb file")?;
+            tokendb.add_token(tokendb::Token::from_string(&token), &uid)?;
+            println!("Created token {} for user {}", token, uid);
             Ok(())
         }
     }

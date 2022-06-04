@@ -10,7 +10,7 @@ pub struct TokenDB {
     db: sled::Db,
 }
 
-pub struct Token([u8; 8]);
+pub struct Token(String);
 
 struct TokenData {
     uid: String,
@@ -39,44 +39,45 @@ impl TokenDB {
         })
     }
 
-    // pub fn get_token_of_user(&self, uid: &str) -> Result<Option<Token>> {
-    //     if let Some(old_token) = self.db.get(format!("token_by_uid/{}", uid).as_bytes())? {
-    //         Ok(Some(Token::try_from_ref(old_token.as_ref())?))
-    //     } else {
-    //         Ok(None)
-    //     }
-    // }
-
-    pub fn create_token_for_user(&self, uid: &str) -> Result<Token> {
-        let token = Token::random()?;
-
+    pub fn add_token(&self, token: Token, uid: &str) -> Result<Token> {
         self.db
             .transaction(|tx_db: &sled::transaction::TransactionalTree| {
                 if let Some(old_token) = tx_db.get(format!("token_by_uid/{}", uid).as_bytes())? {
-                    let old_token = Token::try_from_ref(old_token.as_ref()).map_err(to_abort)?;
+                    let old_token = Token::try_from_bytes(old_token.as_ref()).map_err(to_abort)?;
                     return Err(to_abort(anyhow!(
                         "You already have a token: {}",
                         old_token.to_string()
                     )));
                 }
 
-                tx_db.insert(format!("token_by_uid/{}", uid).as_bytes(), &token.0)?;
+                tx_db.insert(format!("token_by_uid/{}", uid).as_bytes(), token.to_bytes())?;
 
-                tx_db.insert(
-                    &token.0,
+                if let Some(old_token_data) = tx_db.insert(
+                    token.to_bytes(),
                     TokenData {
                         uid: uid.to_string(),
                         last_use: SystemTime::UNIX_EPOCH,
                     }
                     .try_to_buf()
                     .map_err(to_abort)?,
-                )?;
+                )? {
+                    let old_token =
+                        TokenData::try_from_buf(old_token_data.as_ref()).map_err(to_abort)?;
+                    return Err(to_abort(anyhow!(
+                        "This token is already registered to user {:?}",
+                        old_token.uid
+                    )));
+                }
 
                 Ok(())
             })
             .map_err(from_abort)?;
 
         Ok(token)
+    }
+
+    pub fn create_token_for_user(&self, uid: &str) -> Result<Token> {
+        self.add_token(Token::random()?, uid)
     }
 
     pub fn try_use_token(&self, token: Token, min_interval: Duration) -> Result<()> {
@@ -86,7 +87,7 @@ impl TokenDB {
 
                 let data = TokenData::try_from_buf(
                     tx_db
-                        .get(&token.0)?
+                        .get(&token.to_bytes())?
                         .context("This token does not exist")
                         .map_err(to_abort)?
                         .as_ref(),
@@ -103,7 +104,7 @@ impl TokenDB {
                 }
 
                 tx_db.insert(
-                    &token.0,
+                    token.to_bytes(),
                     TokenData {
                         uid: data.uid,
                         last_use: now,
@@ -121,40 +122,39 @@ impl TokenDB {
 
 impl Token {
     fn random() -> Result<Token> {
-        let mut token = Token([0u8; 8]);
-        token.0[0] = 0xff; // a character outside ASCII to avoid collisions
-        token.0[1..7]
-            .try_fill(&mut rand::thread_rng())
+        let mut buf = [0u8; 8];
+        buf.try_fill(&mut rand::thread_rng())
             .context("Failed to generate random token")?;
-        Ok(token)
+
+        let mut s = String::with_capacity(buf.len() * 2);
+        for byte in buf {
+            write!(s, "{:02x}", byte).unwrap();
+        }
+        Ok(Token(s))
     }
 
-    fn try_from_ref(data: &[u8]) -> Result<Token> {
-        let mut token = Token([0u8; 8]);
-        if data.len() != token.0.len() {
-            bail!("Invalid token length");
+    fn try_from_bytes(data: &[u8]) -> Result<Token> {
+        if data[0] != 0xff {
+            bail!("Invalid token format");
         }
-        token.0.copy_from_slice(data);
-        Ok(token)
+        Ok(Token(
+            String::from_utf8(data[1..].to_vec()).context("Failed to parse token")?,
+        ))
     }
 
-    pub fn try_from_string(s: &str) -> Result<Token> {
-        let mut token = Token([0u8; 8]);
-        if s.len() != token.0.len() * 2 {
-            bail!("Invalid token length");
-        }
-        for i in 0..token.0.len() {
-            token.0[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).context("Invalid token")?;
-        }
-        Ok(token)
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(1 + self.0.as_bytes().len());
+        vec.push(0xff);
+        vec.extend_from_slice(self.0.as_bytes());
+        vec
+    }
+
+    pub fn from_string(s: &str) -> Token {
+        Token(s.to_string())
     }
 
     pub fn to_string(&self) -> String {
-        let mut s = String::with_capacity(self.0.len() * 2);
-        for byte in self.0 {
-            write!(s, "{:02x}", byte).unwrap();
-        }
-        s
+        self.0.clone()
     }
 }
 
