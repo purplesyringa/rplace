@@ -3,7 +3,7 @@
     <head>
         <title>r/place</title>
 
-        <style type="text/css">
+        <style>
             .grid {
                 display: inline-block;
                 position: relative;
@@ -32,15 +32,15 @@
         <div>
             <a href="/get_token">Получение токена</a>
             |
-            Токен: <input type="password" placeholder="abcdefg" id="token" required />
+            <label for="token">Токен: </label><input type="password" placeholder="abcdefg" id="token" required />
             |
-            Цвет: <input type="color" id="color" />
+            <label for="color">Цвет: </label><input type="color" id="color" />
             |
             <span class="status">Connecting...</span>
         </div>
 
         <div class="grid">
-            <canvas id="canvas"></canvas>
+            <canvas id="canvas" width="0" height="0"></canvas>
             <div class="highlighted-row"></div>
             <div class="highlighted-column"></div>
         </div>
@@ -65,7 +65,6 @@
             function connect() {
                 ws = new WebSocket(url);
                 ws.addEventListener("message", async e => {
-                    console.log(e.data);
                     if(e.data instanceof Blob) {
                         // Whole field data
                         ctx.fillStyle = BACKGROUND_COLOR;
@@ -85,8 +84,8 @@
                         document.querySelector(".status").textContent = "Connected";
                     } else if(typeof e.data === "string") {
                         if(e.data.startsWith("error ")) {
-                            console.error(e.data.substr(6));
-                            alert(e.data.substr(6));
+                            console.error(e.data.slice(6));
+                            alert(e.data.slice(6));
                         } else if(e.data.startsWith("grid ")) {
                             const [_, width, height] = e.data.split(" ");
                             fieldWidth = width;
