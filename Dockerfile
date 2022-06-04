@@ -1,5 +1,4 @@
 FROM rust:bullseye as chef
-RUN apt-get update && apt-get install ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN rustup install nightly && rustup default nightly
 RUN cargo install cargo-chef
 WORKDIR /build
@@ -16,6 +15,7 @@ RUN cargo install --path . --root /output
 
 FROM debian:bullseye-slim
 WORKDIR /app
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /output/bin/rplace /app/rplace
 COPY docker/Rocket.toml /app/Rocket.toml

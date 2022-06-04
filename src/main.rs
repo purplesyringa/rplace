@@ -22,7 +22,7 @@ use tokio_tungstenite::WebSocketStream;
 use tungstenite::protocol::Message;
 
 fn get_cooldown_period() -> Duration {
-    return 60 * Duration::SECOND;
+    return 10 * Duration::SECOND;
 }
 
 struct GlobalState {
