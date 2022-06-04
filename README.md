@@ -15,13 +15,13 @@ cargo +nightly build
 First, you need to generate a grid and a database:
 
 ```shell
-cargo +nightly run init <path_to_data_directory> <grid_width> <grid_height>
+rplace init <path_to_data_directory> <grid_width> <grid_height>
 ```
 
 After that, you can start the server like this:
 
 ```shell
-cargo +nightly run serve <path_to_data_directory>
+rplace serve <path_to_data_directory>
 ```
 
 This starts the HTTP server on port 8000 and the websocket server on port 9000.
@@ -51,3 +51,14 @@ Alternatively, REST API may be used: the `POST /set_color` endpoint takes parame
 - `color` -- in format `#rrggbb` or `rrggbb`, where `rr`, `gg`, and `bb` are hexadecimal numbers.
 
 All coordinates are zero-based.
+
+
+## Administration
+
+You can add a token manually via:
+
+```shell
+rplace add-token <path_to_data_directory> <token> <uid>
+```
+
+`uid` is a user identifier, usually `ejudge/<login>`.
