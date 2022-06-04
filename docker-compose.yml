@@ -1,0 +1,19 @@
+version: '3.10'
+
+services:
+  rplace:
+    build: .
+    user: ${UID:-1000}:${GID:-1000}
+    volumes:
+      - ./data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${TRAEFIK_MAIN:-rplace}.rule=Host(`$DOMAIN`)
+      - traefik.http.routers.${TRAEFIK_MAIN:-rplace}.service=${TRAEFIK_MAIN:-rplace}
+      - traefik.http.services.${TRAEFIK_MAIN:-rplace}.loadbalancer.server.port=8000
+      - traefik.http.routers.${TRAEFIK_WS:-rplace_ws}.rule=Host(`$DOMAIN`)&&Path(`/ws`)
+      - traefik.http.routers.${TRAEFIK_WS:-rplace_ws}.service=${TRAEFIK_WS:-rplace_ws}
+      - traefik.http.services.${TRAEFIK_WS:-rplace_ws}.loadbalancer.server.port=9000
+    restart: always
+    command: serve /data
+
