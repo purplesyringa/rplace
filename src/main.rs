@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use futures_util::{stream::SplitSink, SinkExt};
 use rocket::{
     form::Form,
-    fs::{relative, FileServer},
+    fs::FileServer,
     futures::{StreamExt, TryStreamExt},
     routes, FromForm, State,
 };
@@ -232,7 +232,7 @@ async fn handle_ws_connection(
 async fn start_http_server(state: &'static GlobalState) -> Result<()> {
     rocket::build()
         .mount("/", routes![get_token, set_color])
-        .mount("/", FileServer::from(relative!("static")))
+        .mount("/", FileServer::from("static"))
         .manage(state)
         .launch()
         .await?;
