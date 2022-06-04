@@ -269,6 +269,7 @@ enum Command {
     Init(String, u32, u32),
     Serve(String),
     AddToken(String, String, String),
+    Resize(String, u32, u32, bool),
 }
 
 fn get_command() -> Result<Command> {
@@ -307,6 +308,25 @@ fn get_command() -> Result<Command> {
                 .next()
                 .context("'rplace add-token' expects the UID as the third argument")?;
             Ok(Command::AddToken(dir_path, token, uid))
+        }
+        "resize" => {
+            let dir_path = args.next().context("'rplace resize' expects the path to the directory for permanent storage as the first argument")?;
+            let width: u32 = args
+                .next()
+                .context(
+                    "'rplace resize' expects the new width of the grid as the second argument",
+                )?
+                .parse()
+                .context("Invalid width")?;
+            let height: u32 = args
+                .next()
+                .context(
+                    "'rplace resize' expects the new height of the grid as the third argument",
+                )?
+                .parse()
+                .context("Invalid height")?;
+            let force = args.next() == Some("--force".to_string());
+            Ok(Command::Resize(dir_path, width, height, force))
         }
         _ => bail!(
             "Unknown CLI command: {}. Run rplace without arguments to see some help",
@@ -357,6 +377,51 @@ async fn main() -> Result<()> {
                 .context("Failed to load tokendb file")?;
             tokendb.add_token(tokendb::Token::from_string(&token), &uid)?;
             println!("Created token {} for user {}", token, uid);
+            Ok(())
+        }
+        Command::Resize(dir_path, width, height, force) => {
+            let grid_data_file = std::fs::File::options()
+                .read(true)
+                .write(true)
+                .open(format!("{}/grid", dir_path))
+                .context("Failed to open grid data file")?;
+            let grid =
+                grid::Grid::from_file(&grid_data_file).context("Failed to load grid data file")?;
+
+            if (width < grid.width() || height < grid.height()) && !force {
+                bail!("The new size is smaller than the current grid size. Add '--force' to cut the bottom right corner");
+            }
+
+            let mut data = Vec::with_capacity(height as usize);
+            for y in 0..height {
+                let mut row = Vec::with_capacity(width as usize);
+                for x in 0..width {
+                    row.push(
+                        grid.get_cell(x as usize, y as usize)
+                            .unwrap_or(grid::CellData {
+                                r: 0,
+                                g: 0,
+                                b: 0,
+                                a: 0,
+                            }),
+                    );
+                }
+                data.push(row);
+            }
+
+            grid::Grid::create_file_with_data(
+                format!("{}/grid.tmp", dir_path).as_ref(),
+                width,
+                height,
+                &data,
+            )?;
+
+            std::fs::rename(
+                format!("{}/grid.tmp", dir_path),
+                format!("{}/grid", dir_path),
+            )?;
+
+            println!("Resized the grid at {}", dir_path);
             Ok(())
         }
     }

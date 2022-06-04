@@ -30,6 +30,26 @@ impl Grid {
         Ok(())
     }
 
+    pub fn create_file_with_data(
+        path: &Path,
+        width: u32,
+        height: u32,
+        data: &[Vec<CellData>],
+    ) -> Result<()> {
+        let mut file = File::create(path).context("Failed to create grid data file")?;
+        file.write(b"Rplc")?; // magic
+        file.write(&1u32.to_le_bytes())?; // version
+        file.write(&width.to_le_bytes())?; // width
+        file.write(&height.to_le_bytes())?; // height
+        for y in 0..height {
+            for x in 0..width {
+                let cell = data[y as usize][x as usize];
+                file.write(&[cell.r, cell.g, cell.b, cell.a])?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn from_file(file: &File) -> Result<Grid> {
         let mmapped_data =
             unsafe { MmapMut::map_mut(file) }.context("Failed to mmap grid data file")?;
@@ -69,7 +89,6 @@ impl Grid {
         self._height
     }
 
-    /*
     pub fn get_cell(&self, x: usize, y: usize) -> Result<CellData> {
         if !(x < (self._width as usize) && y < (self._height as usize)) {
             bail!("Cell coordinates are out of bounds: X must be from 0 to {}, Y must be from 0 to {}, got X = {}, Y = {}", self._width - 1, self._height - 1, x, y);
@@ -81,7 +100,6 @@ impl Grid {
         let a = self.mmapped_data[offset + 3];
         Ok(CellData { r, g, b, a })
     }
-    */
 
     pub fn set_cell(&mut self, x: usize, y: usize, value: CellData) -> Result<()> {
         if !(x < (self._width as usize) && y < (self._height as usize)) {

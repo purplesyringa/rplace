@@ -61,4 +61,10 @@ You can add a token manually via:
 rplace add-token <path_to_data_directory> <token> <uid>
 ```
 
-`uid` is a user identifier, usually `ejudge/<login>`.
+(`uid` is a user identifier, usually `ejudge/<login>`)
+
+You can resize the grid (**do not do this while the server is running**):
+
+```shell
+rplace resize <path_to_data_directory> <new_width> <new_height>
+```
