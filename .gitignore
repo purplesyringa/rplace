@@ -1,2 +1,4 @@
 /target
 /perm
+/.env
+/data
